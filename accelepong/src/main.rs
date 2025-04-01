@@ -1,5 +1,6 @@
 // TODO: refazer sistema de colisão, o atual buga a velocidades muito altas da bola pois a bola fica presa dentro da raquete e quando sai a direção da colisão ativa pode ser a oposta da que deveria, fazendo com que a checagem ocorra do lado errado e a bola atravesse as raquetes infinitamente.
 
+use avian2d::prelude::*;
 use bevy::{
     math::bounding::{Aabb2d, BoundingCircle, BoundingVolume, IntersectsVolume},
     prelude::*,
@@ -402,7 +403,8 @@ fn spawn_paddles(
             Player,
             Paddle,
             Shape(shape.size()),
-            Position(Vec2::new(right_paddle_x, 0.)),
+            RigidBody::Kinematic,
+            Collider::rectangle(PADDLE_WIDTH, PADDLE_HEIGHT),
             Mesh2d(mesh.clone()),
             MeshMaterial2d(player_color.clone()),
         ));
@@ -411,7 +413,8 @@ fn spawn_paddles(
         commands.spawn((
             Ai,
             Paddle,
-            Position(Vec2::new(left_paddle_x, 0.)),
+            RigidBody::Kinematic,
+            Collider::rectangle(PADDLE_WIDTH, PADDLE_HEIGHT),
             Mesh2d(mesh.clone()),
             MeshMaterial2d(ai_color.clone()),
         ));
@@ -424,16 +427,18 @@ fn spawn_ball(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    println!("Spawning ball..."); // Log de depuração
-
     let shape = Circle::new(BALL_SIZE);
     let color = Color::srgb(1., 0., 0.); // Vermelho
 
     let mesh = meshes.add(shape);
     let material = materials.add(color);
 
-    // Cria a entidade da bola
-    commands.spawn((Ball, Mesh2d(mesh), MeshMaterial2d(material)));
+    commands.spawn((
+        RigidBody::Dynamic,
+        Collider::circle(BALL_SIZE),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
+    ));
 }
 
 // Sistema para configurar a câmera 2D
@@ -444,7 +449,7 @@ fn spawn_camera(mut commands: Commands) {
 // Função principal que configura e inicia o jogo
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins) // Adiciona os plugins padrão do Bevy
+        .add_plugins((DefaultPlugins, PhysicsPlugins::default())) // Adiciona os plugins padrão do Bevy
         .init_resource::<Score>() // Inicializa o recurso de pontuação
         .init_resource::<BallSpeed>() // Inicializa o recurso de velocidade da bola
         .add_event::<Scored>() // Adiciona o evento de pontuação
