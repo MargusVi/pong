@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 avian2d = "0.2.1"
 bevy = "0.15.3"
+iyes_perf_ui = "0.4.0"

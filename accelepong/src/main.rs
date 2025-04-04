@@ -1,10 +1,15 @@
 use avian2d::prelude::*;
 use bevy::{color::palettes::basic::RED, prelude::*, render::camera::ScalingMode};
+use iyes_perf_ui::prelude::*;
 
 const BALL_RADIUS: f32 = 15.0;
 
 #[derive(Component)]
 struct Camera;
+
+fn setup_debug(mut commands: Commands) {
+    commands.spawn(PerfUiDefaultEntries::default());
+}
 
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
@@ -44,7 +49,12 @@ fn main() {
                 ..default()
             }),
             PhysicsPlugins::default(),
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin,
+            bevy::diagnostic::EntityCountDiagnosticsPlugin,
+            bevy::diagnostic::SystemInformationDiagnosticsPlugin,
+            bevy::render::diagnostic::RenderDiagnosticsPlugin,
+            PerfUiPlugin,
         ))
-        .add_systems(Startup, (setup_camera, spawn_ball))
+        .add_systems(Startup, (setup_debug, setup_camera, spawn_ball))
         .run(); // Inicia o loop principal do jogo
 }
