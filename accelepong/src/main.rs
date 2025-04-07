@@ -4,6 +4,11 @@ use iyes_perf_ui::prelude::*;
 
 const BALL_RADIUS: f32 = 15.0;
 
+#[derive(Resource, Default)]
+struct BallSpeed {
+    speed: f32,
+}
+
 #[derive(Component)]
 struct Camera;
 
@@ -29,25 +34,47 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
+fn generate_random_number(start: i32, end: i32) -> i32 {
+    use rand::Rng;
+
+    let mut rng = rand::rng();
+    rng.random_range(start..end)
+}
+
+fn velocity_from_angle(angle_degrees: f32, speed: f32) -> Vec2 {
+    // Convert angle from degrees to radians
+    let angle_radians = angle_degrees.to_radians();
+
+    // Calculate direction vector components
+    let x = speed * angle_radians.cos();
+    let y = speed * angle_radians.sin();
+
+    // Return the velocity vector
+    Vec2::new(x, y)
+}
+
 fn spawn_ball(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    ball_speed: ResMut<BallSpeed>,
 ) {
     commands.spawn((
-        // Componentes visuais
+        // Visual components
         Mesh2d(meshes.add(Circle::new(BALL_RADIUS))),
         MeshMaterial2d(materials.add(Color::from(RED))),
-        // Componentes para a física
+        // Physics components
         RigidBody::Dynamic,
         Collider::circle(BALL_RADIUS),
-        LinearVelocity(Vec2 { x: 500.0, y: 0.0 }),
-        // Componentes personalizados
+        LinearVelocity(velocity_from_angle(
+            generate_random_number(0, 360) as f32,
+            ball_speed.speed,
+        )), // Send the ball to a random angle with the defined speed
+        // Custom components
         Ball,
     ));
 }
 
-// Função principal que configura e inicia o jogo
 fn main() {
     App::new()
         .add_plugins((
@@ -66,6 +93,7 @@ fn main() {
             PerfUiPlugin,
         ))
         .insert_resource(Gravity(Vec2::ZERO))
+        .insert_resource(BallSpeed { speed: 500.0 })
         .add_systems(Startup, (setup_debug, setup_camera, spawn_ball))
-        .run(); // Inicia o loop principal do jogo
+        .run();
 }
