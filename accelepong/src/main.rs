@@ -7,9 +7,11 @@ use iyes_perf_ui::prelude::*;
 const BALL_RADIUS: f32 = 15.0;
 const WALL_THICKNESS: f32 = 100.0;
 
-#[derive(Resource, Default)]
-struct BallSpeed {
+#[derive(Component)]
+struct BallMovement {
+    angle: f32,
     speed: f32,
+    speed_increment: f32,
 }
 
 #[derive(Component)]
@@ -40,22 +42,21 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
-fn get_initial_ball_movement(speed: f32) -> Vec2 {
+fn get_random_ball_start_angle() -> f32 {
     use rand::Rng;
 
     // We want to avoid angles in ranges 330-30 and 150-210
     // So we'll use the ranges 30-150 and 210-330
     let mut rng = rand::rng();
     let range_selector = rng.random_range(0..2);
-    println!("Range selector: {}", range_selector);
 
     // Choose from the valid ranges
     if range_selector == 0 {
         // Range 30-150
-        velocity_from_angle(rng.random_range(30.0..150.0), speed)
+        rng.random_range(30.0..150.0)
     } else {
         // Range 210-330
-        velocity_from_angle(rng.random_range(210.0..330.0), speed)
+        rng.random_range(210.0..330.0)
     }
 }
 
@@ -66,6 +67,8 @@ fn velocity_from_angle(angle_degrees: f32, speed: f32) -> Vec2 {
     // Calculate direction vector components
     let x = speed * angle_radians.cos();
     let y = speed * angle_radians.sin();
+
+    println!("Velocity: {{{}, {}}}", x, y);
 
     // Return the velocity vector
     Vec2::new(x, y)
@@ -94,7 +97,7 @@ fn spawn_play_field(
         Wall,
     ));
 
-    // Top wall
+    // Bottom wall
     commands.spawn((
         Position::from_xy(0.0, -((window_height - WALL_THICKNESS) / 2.0)),
         Mesh2d(meshes.add(Rectangle::from_size(Vec2::new(
@@ -106,59 +109,108 @@ fn spawn_play_field(
         Collider::rectangle(window_width, WALL_THICKNESS),
         Wall,
     ));
+
+    // Left wall - positioned just outside the visible area
+    commands.spawn((
+        Position::from_xy(-(window_width / 2.0 + WALL_THICKNESS / 2.0), 0.0),
+        Mesh2d(meshes.add(Rectangle::from_size(Vec2::new(
+            WALL_THICKNESS,
+            window_height,
+        )))),
+        MeshMaterial2d(materials.add(Color::srgb(0., 0., 0.))),
+        RigidBody::Static,
+        Collider::rectangle(WALL_THICKNESS, window_height),
+        Wall,
+    ));
+
+    // Right wall - positioned just outside the visible area
+    commands.spawn((
+        Position::from_xy(window_width / 2.0 + WALL_THICKNESS / 2.0, 0.0),
+        Mesh2d(meshes.add(Rectangle::from_size(Vec2::new(
+            WALL_THICKNESS,
+            window_height,
+        )))),
+        MeshMaterial2d(materials.add(Color::srgb(0., 0., 0.))),
+        RigidBody::Static,
+        Collider::rectangle(WALL_THICKNESS, window_height),
+        Wall,
+    ));
 }
 
 fn spawn_ball(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    ball_speed: ResMut<BallSpeed>,
 ) {
+    let initial_angle = get_random_ball_start_angle();
+    let speed = 500.0;
+    let speed_increment = 10.0;
     commands.spawn((
-        // Visual components
         Mesh2d(meshes.add(Circle::new(BALL_RADIUS))),
         MeshMaterial2d(materials.add(Color::from(RED))),
-        // Physics components
         RigidBody::Dynamic,
         Collider::circle(BALL_RADIUS),
-        LinearVelocity(get_initial_ball_movement(ball_speed.speed)), // Send the ball to a random angle with the defined speed
-        // Custom components
+        Restitution::PERFECTLY_ELASTIC,
+        Friction::ZERO,
+        LinearDamping(0.0),
+        Mass::ZERO,
+        // Inicializa o vetor de velocidade
+        LinearVelocity(velocity_from_angle(initial_angle, speed)),
+        // Agora adiciona o componente que armazena o estado do movimento
+        BallMovement {
+            angle: initial_angle,
+            speed,
+            speed_increment,
+        },
         Ball,
     ));
 }
 
-// TODO: está perdendo velocidade, isso não pode ocorrer
 fn collision_system(
     mut collision_events: EventReader<Collision>,
-    mut ball_query: Query<&mut LinearVelocity, With<Ball>>,
+    mut ball_query: Query<(&mut LinearVelocity, &mut BallMovement), With<Ball>>,
     wall_query: Query<(), With<Wall>>,
 ) {
     for Collision(contacts) in collision_events.read() {
-        // Verifica se a colisão envolve a bola e uma parede
-        let (ball_entity, _wall_entity, manifolds) = if ball_query.get(contacts.entity1).is_ok()
-            && wall_query.get(contacts.entity2).is_ok()
-        {
-            (contacts.entity1, contacts.entity2, &contacts.manifolds)
-        } else if ball_query.get(contacts.entity2).is_ok()
-            && wall_query.get(contacts.entity1).is_ok()
-        {
-            (contacts.entity2, contacts.entity1, &contacts.manifolds)
-        } else {
-            continue;
-        };
+        if contacts.collision_started() {
+            let (ball_entity, _wall_entity, _manifolds) =
+                if ball_query.get(contacts.entity1).is_ok()
+                    && wall_query.get(contacts.entity2).is_ok()
+                {
+                    (contacts.entity1, contacts.entity2, &contacts.manifolds)
+                } else if ball_query.get(contacts.entity2).is_ok()
+                    && wall_query.get(contacts.entity1).is_ok()
+                {
+                    (contacts.entity2, contacts.entity1, &contacts.manifolds)
+                } else {
+                    continue;
+                };
 
-        // Itera sobre os manifolds de contato
-        for manifold in manifolds {
-            // Obtém o vetor normal do contato no espaço global
-            let normal = manifold.global_normal2(&Rotation::default());
+            if let Some(first_manifold) = contacts.manifolds.first() {
+                let normal = first_manifold.global_normal2(&Rotation::default());
 
-            // Atualiza a velocidade da bola refletindo-a em relação ao vetor normal
-            if let Ok(mut velocity) = ball_query.get_mut(ball_entity) {
-                let velocity_vector = Vec2::new(velocity.x, velocity.y);
-                let reflected_velocity =
-                    velocity_vector - 2.0 * velocity_vector.dot(normal) * normal;
-                velocity.x = reflected_velocity.x;
-                velocity.y = reflected_velocity.y;
+                if let Ok((mut velocity, mut ball_movement)) = ball_query.get_mut(ball_entity) {
+                    let old_velocity = Vec2::new(velocity.x, velocity.y);
+                    let dot = old_velocity.dot(normal);
+                    let mut new_velocity = old_velocity - 2.0 * dot * normal;
+
+                    // Incrementa a velocidade
+                    ball_movement.speed += ball_movement.speed_increment;
+                    ball_movement.speed_increment += ball_movement.speed_increment * 10.0 / 100.0;
+
+                    // Normaliza o vetor de velocidade para manter a direção e aplica a nova magnitude
+                    new_velocity = new_velocity.normalize() * ball_movement.speed;
+
+                    velocity.x = new_velocity.x;
+                    velocity.y = new_velocity.y;
+
+                    ball_movement.angle = new_velocity.y.atan2(new_velocity.x).to_degrees();
+
+                    println!(
+                        "Reflexão: velocidade alterada de {:?} para {:?}, nova velocidade: {}",
+                        old_velocity, new_velocity, ball_movement.speed
+                    );
+                }
             }
         }
     }
@@ -183,7 +235,6 @@ fn main() {
             PerfUiPlugin,
         ))
         .insert_resource(Gravity::ZERO)
-        .insert_resource(BallSpeed { speed: 500.0 })
         .add_systems(
             Startup,
             (setup_debug, setup_camera, spawn_play_field, spawn_ball),
