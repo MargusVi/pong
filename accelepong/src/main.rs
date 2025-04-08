@@ -222,7 +222,7 @@ fn main() {
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     position: WindowPosition::Automatic,
-                    mode: WindowMode::Fullscreen(MonitorSelection::Index(1)),
+                    mode: WindowMode::Fullscreen(MonitorSelection::Index(1)), // TODO: verificar como separar o espaço virtual da resolução da tela para que mudanças de resolução não afetem o jogo.
                     ..default()
                 }),
                 ..default()
