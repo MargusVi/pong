@@ -4,8 +4,10 @@ use bevy::{
 };
 use iyes_perf_ui::prelude::*;
 
-const BALL_RADIUS: f32 = 15.0;
+const BALL_RADIUS: f32 = 10.0;
 const WALL_THICKNESS: f32 = 100.0;
+const PADDLE_WIDTH: f32 = 15.0; // Largura das raquetes
+const PADDLE_HEIGHT: f32 = 75.0; // Altura das raquetes
 
 #[derive(Component)]
 struct BallMovement {
@@ -22,6 +24,9 @@ struct Wall;
 
 #[derive(Component)]
 struct Ball;
+
+#[derive(Component)]
+struct Player;
 
 fn setup_debug(mut commands: Commands) {
     commands.spawn(PerfUiDefaultEntries::default());
@@ -166,6 +171,26 @@ fn spawn_ball(
     ));
 }
 
+fn spawn_player(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    window: Query<&Window>,
+) {
+    let window = window.get_single().unwrap();
+    let window_width = window.resolution.width();
+    let window_height = window.resolution.height();
+
+    commands.spawn((
+        Position::from_xy(window_width / 2.0 - WALL_THICKNESS / 2.0, 0.0),
+        Mesh2d(meshes.add(Rectangle::new(PADDLE_WIDTH, PADDLE_HEIGHT))),
+        MeshMaterial2d(materials.add(Color::srgb(255.0, 255.0, 255.0))),
+        RigidBody::Kinematic,
+        Collider::rectangle(PADDLE_WIDTH, PADDLE_HEIGHT),
+        Player,
+    ));
+}
+
 fn collision_system(
     mut collision_events: EventReader<Collision>,
     mut ball_query: Query<(&mut LinearVelocity, &mut BallMovement), With<Ball>>,
@@ -196,7 +221,7 @@ fn collision_system(
 
                     // Incrementa a velocidade
                     ball_movement.speed += ball_movement.speed_increment;
-                    ball_movement.speed_increment += ball_movement.speed_increment * 10.0 / 100.0;
+                    ball_movement.speed_increment = 10.0;
 
                     // Normaliza o vetor de velocidade para manter a direção e aplica a nova magnitude
                     new_velocity = new_velocity.normalize() * ball_movement.speed;
@@ -237,7 +262,13 @@ fn main() {
         .insert_resource(Gravity::ZERO)
         .add_systems(
             Startup,
-            (setup_debug, setup_camera, spawn_play_field, spawn_ball),
+            (
+                setup_debug,
+                setup_camera,
+                spawn_play_field,
+                spawn_player,
+                spawn_ball,
+            ),
         )
         .add_systems(PostUpdate, collision_system)
         .run();
